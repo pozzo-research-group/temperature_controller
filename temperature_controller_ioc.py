@@ -20,8 +20,10 @@ logger = logging.getLogger("caproto")
 
 def get_temp(serial_id: int, client):
     ''' Reads temperature from the RS485 client using the device serial_id'''
+    
+    temperature = client.read_holding_registers(1, slave=serial_id)
 
-    temperature = client.read_holding_registers(0x0001, slave=serial_id)
+    temperature = temperature.registers[0]
 
     return temperature
 
@@ -29,7 +31,9 @@ def get_temp(serial_id: int, client):
 def get_setpoint(serial_id: int, client):
     ''' Reads the temperature setpoint from the RS485 client using the device serial_id'''
 
-    set_point = client.read_holding_registers(0x0000, slave=serial_id)
+    set_point = client.read_holding_registers(0, slave=serial_id)
+
+    set_point = set_point.registers[0]
 
     return set_point
 
@@ -62,23 +66,25 @@ class TCPVGroup(PVGroup):
         self.host = host
         self.port = port
         self.serial_id = serial_id
-        self.client =  ModbusTcpClient(self.host, self.port, framer = ModbusRtuFramer, timeout = 1)
+        self.client =  ModbusTcpClient(self.host, port=self.port, framer = ModbusRtuFramer, timeout = 10)
+        print(self.client)
     
     async def _download_and_update(self):
         "download all parameters and put them in the corresponding PVs"
 
-        temp = await get_setpoint(self.host.value, self.port.value, self.serialId.value)
-        await self.setpoint_read.write(temp)
+        temperature_r = await get_setpoint(self.serial_id)
+        await self.setpoint_read.write(temperature_r)
 
         # current temperature
-        temp = await get_temp(self.host.value, self.port.value, self.serialId.value)
-        await self.temperature.write(temp)
+        temperature_r = await get_temp(self.serial_id, self.client)
+        await self.temperature.write(temperature_r)
 
     temperature = pvproperty(
-        value=1.01,
+        value=get_temp(1, client=ModbusTcpClient('192.168.0.4', port=502, framer=ModbusRtuFramer,
+                                                 timeout= 10)),
         record="ai",
         units="C",
-        precision=1,
+        #precision=1,
         read_only=True,
         doc="temperature/PV readout",
     )
@@ -87,7 +93,7 @@ class TCPVGroup(PVGroup):
         value=1.01,
         record="ai",
         units="C",
-        precision=1,
+        #precision=1,
         read_only=True,
         doc="setpoint read back value",
     )
@@ -96,14 +102,14 @@ class TCPVGroup(PVGroup):
         value=1.01,
         record="ao",
         units="C",
-        precision=1,
+        #precision=1,
         read_only=False,
         doc="setpoint/SV value",
     )
 
     read_mode = pvproperty(
         value=0,
-        record="ar",
+        record="ao",
         read_only=False,
         doc="Run mode value",
     )
@@ -122,7 +128,7 @@ class TCPVGroup(PVGroup):
 
 
 def create_ioc(
-        prefix: str, *, host: str, port: int, serialId: int, autosave: str, **ioc_options
+        prefix: str, *, host: str, port: int, serial_id: int, autosave: str, **ioc_options
 ) -> TCPVGroup:
     """ Create a new arduino IOC """
     autosave = pathlib.Path(autosave).resolve().absolute()
@@ -132,8 +138,8 @@ def create_ioc(
             AutosaveHelper, file_manager=RotatingFileManager(autosave)
         )
         autosave_helper.filename = autosave
-
-    return TCPVGroup(prefix=prefix, host=host, port=port, serialId=serialId, **ioc_options)
+    print(prefix)
+    return TCPVGroup(prefix=prefix, host=host, port=port, serial_id=serial_id, **ioc_options)
 
 
 def create_parser():
@@ -158,7 +164,7 @@ def create_parser():
         type=int,
     )
     parser.add_argument(
-        "--serialId",
+        "--serial_id",
         help="Serial Id of the RS485 device",
         default=1,
         type=int,
@@ -179,7 +185,7 @@ if __name__ == "__main__":
     ioc_options, run_options = split_args(args)
 
     ioc = create_ioc(
-        autosave=args.autosave, host=args.host, port=args.port, serialId=args.serialId, **ioc_options
+        autosave=args.autosave, host=args.host, port=args.port, serial_id=args.serial_id, **ioc_options
     )
 
     run(ioc.pvdb, **run_options)
