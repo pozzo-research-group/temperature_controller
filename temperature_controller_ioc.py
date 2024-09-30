@@ -90,7 +90,8 @@ class TCPVGroup(PVGroup):
     )
 
     setpoint_read = pvproperty(
-        value=1.01,
+        value=get_setpoint(1, client=ModbusTcpClient('192.168.0.4', port=502, framer=ModbusRtuFramer,
+                                                 timeout= 10)),
         record="ai",
         units="C",
         #precision=1,
@@ -100,7 +101,7 @@ class TCPVGroup(PVGroup):
 
     setpoint = pvproperty(
         value=1.01,
-        record="ao",
+        #record="ao",
         units="C",
         #precision=1,
         read_only=False,
