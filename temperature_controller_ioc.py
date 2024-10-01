@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import logging
+from controller import temperature_controller
 from caproto.server import (
     pvproperty,
     PVGroup,
@@ -9,97 +10,77 @@ from caproto.server import (
     template_arg_parser,
 )
 import asyncio
+import argparse
 from typing import Optional
 from caproto.server.autosave import AutosaveHelper, RotatingFileManager, autosaved
 from pymodbus.client import ModbusTcpClient
 from pymodbus.transaction import ModbusRtuFramer
 import pathlib
 
-logger = logging.getLogger("caproto")
-
-
-def get_temp(serial_id: int, client):
-    ''' Reads temperature from the RS485 client using the device serial_id'''
-    
-    temperature = client.read_holding_registers(1, slave=serial_id)
-
-    temperature = temperature.registers[0]
-
-    return temperature
-
-
-def get_setpoint(serial_id: int, client):
-    ''' Reads the temperature setpoint from the RS485 client using the device serial_id'''
-
-    set_point = client.read_holding_registers(0, slave=serial_id)
-
-    set_point = set_point.registers[0]
-
-    return set_point
-
-
-def set_temp(temp_value: float, serial_id: int, client):
-    ''' Writes the temperature setpoint to the RS485 device using the device's serial_id'''
-
-    set_point = client.write_register(0x0001, temp_value, slave=serial_id)
-
-    return print(f'The temperature controller id: {serial_id} has been set to {temp_value} degree C')
-
-
-def run_mode(mode: int, serial_id: int, client):
-    '''
-    Changes the temperature controller run value to on or off 
-    '''
-
-    temp_mode = client.write_register(0x0084, mode, slave=serial_id)
-
-    return print(f'The mode of temperature controller {serial_id} has been change to {mode}')
-
+logger = logging.basicConfig(filename='temp_controller_ioc.log',
+                             filemode='a',
+                             format='%(asctime)s - %(name)s - %(levelname)s\
+                                - %(message)s',
+                             level=logging.info)
 
 class TCPVGroup(PVGroup):
     "group of PVs for a temperature controller, controlled via ModBus-RTU over RS485 over ethernet"  
 
-    # again copying some style from the fluke ioc example
-    def __init__(self, *args, host, port, serial_id, **kwargs):
-        super().__init__(*args, **kwargs)
-        # note port is second argument of host.. see startup..
-        self.host = host
-        self.port = port
-        self.serial_id = serial_id
-        self.client =  ModbusTcpClient(self.host, port=self.port, framer = ModbusRtuFramer, timeout = 10)
-        print(self.client)
-    
-    async def _download_and_update(self):
-        "download all parameters and put them in the corresponding PVs"
+    t1_temperature = pvproperty(
+        value=0.0,
+        dtype=float,
+        units="C",
+        #precision=1,
+        read_only=True,
+        doc="Temperature/PV readout",
+    )
 
-        temperature_r = await get_setpoint(self.serial_id)
-        await self.setpoint_read.write(temperature_r)
+    t2_temperature = pvproperty(
+        value=0.0,
+        dtype=float,
+        units="C",
+        #precision=1,
+        read_only=True,
+        doc="Temperature/PV readout",
+    )
 
-        # current temperature
-        temperature_r = await get_temp(self.serial_id, self.client)
-        await self.temperature.write(temperature_r)
+    t3_temperature = pvproperty(
+        value=0.0,
+        dtype=float,
+        units="C",
+        #precision=1,
+        read_only=True,
+        doc="Temperature/PV readout",
+    )
 
-    temperature = pvproperty(
-        value=get_temp(1, client=ModbusTcpClient('192.168.0.4', port=502, framer=ModbusRtuFramer,
-                                                 timeout= 10)),
+    t1_setpoint_read = pvproperty(
+        value=0,
         record="ai",
         units="C",
         #precision=1,
         read_only=True,
-        doc="temperature/PV readout",
+        doc="setpoint read back value for T1",
     )
 
-    setpoint_read = pvproperty(
-        value=get_setpoint(1, client=ModbusTcpClient('192.168.0.4', port=502, framer=ModbusRtuFramer,
-                                                 timeout= 10)),
+    t2_setpoint_read = pvproperty(
+        value=0,
         record="ai",
         units="C",
         #precision=1,
         read_only=True,
-        doc="setpoint read back value",
+        doc="setpoint read back value for T2",
     )
 
-    setpoint = pvproperty(
+    t3_setpoint_read = pvproperty(
+        value=0,
+        record="ai",
+        units="C",
+        #precision=1,
+        read_only=True,
+        doc="setpoint read back value for T3",
+    )
+
+    t1_setpoint = pvproperty(
         value=1.01,
         #record="ao",
         units="C",
@@ -108,85 +89,264 @@ class TCPVGroup(PVGroup):
         doc="setpoint/SV value",
     )
 
-    read_mode = pvproperty(
+    t2_setpoint = pvproperty(
+        value=1.01,
+        #record="ao",
+        units="C",
+        #precision=1,
+        read_only=False,
+        doc="setpoint/SV value",
+    )
+
+    t3_setpoint = pvproperty(
+        value=1.01,
+        #record="ao",
+        units="C",
+        #precision=1,
+        read_only=False,
+        doc="setpoint/SV value",
+    )
+
+    t1_runmode = pvproperty(
         value=0,
         record="ao",
         read_only=False,
         doc="Run mode value",
     )
 
-    @setpoint.putter
-    async def setpoint(self, instance, value):
-        serial_id = self.serial_id
-        logger.debug(f'setting temperature setpoint of serialId {serial_id} to value: {value}')
-        await set_temp(value, serial_id, self.client)
+    t2_runmode = pvproperty(
+        value=0,
+        record="ao",
+        read_only=False,
+        doc="Run mode value",
+    )
 
-    @read_mode.putter
-    async def read_mode(self, instance, value):
-        serial_id = self.serial_id.value
-        logger.debug(f'settig temp controller run_mode of serialId {serial_id} to value: {value}')
-        await run_mode(value, serial_id)
+    t3_runmode = pvproperty(
+        value=0,
+        record="ao",
+        read_only=False,
+        doc="Run mode value",
+    )
+
+    # again copying some style from the fluke ioc example
+    def __init__(self, prefix, tc_configs, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        self.controllers = {}
+
+        for tc_name, config in tc_configs.items():
+            try:
+                controller = temperature_controller(
+                    ip = config['ip'],
+                    port = config['port'],
+                    serial_id = config['serial_id']
+                )
+                self.controllers[tc_name] = controller
+                logger.info(f"Connected to {tc_name}")
+
+            except Exception as e:
+                logger.error(f'Failed to initialize {tc_name}: {e}')
+                self.controllers[tc_name] = None
+
+        asyncio.create_task(self.update_temperatures())    
+
+    async def update_temperatures(self):
+        while True: 
+            for tc_name, controller in self.controllers.items():
+                if controller:
+                    temp = controller.get_temp()
+                    if temp is not None:
+                        getattr(self, f"{tc_name}_temperature")._value = temp
+                        getattr(self, f"{tc_name}_temperature").changed()
+
+                        logger.info("Temperature updated: {temp} C")
+
+            await asyncio.sleep(1)
+
+    async def update_setpoints(self):
+        while True: 
+            for tc_name, controller in self.controllers.items():
+                if controller:
+                    temp = controller.get_setpoint()
+                    if temp is not None:
+                        getattr(self, f"{tc_name}_setpoint")._value = temp
+                        getattr(self, f"{tc_name}_setpoint").changed()
+
+                        logger.info("Setpoint updated: {temp} C")
+
+            await asyncio.sleep(1)
+
+    # async def _download_and_update(self):
+    #     "download all parameters and put them in the corresponding PVs"
+
+    #     temperature_r = await get_setpoint(self.serial_id)
+    #     await self.setpoint_read.write(temperature_r)
+
+    #     # current temperature
+    #     temperature_r = await get_temp(self.serial_id, self.client)
+    #     await self.temperature.write(temperature_r)
+
+    @t1_setpoint.putter
+    async def t1_setpoint(self, instance, value):
+        controller = self.controllers.get('t1')
+        if controller:
+            set_point_value = controller.set_temp(value)
+
+            if set_point_value:
+                instance._value = value
+                instance.changed()
+                logger.info(f"T1 set to: {value} C")
+            else:
+                logger.error(f"T1 controller couldn't be set to {value}")
+        
+        else:
+            logger.error("T1 controller could not be initialized")
+    
+
+    @t2_setpoint.putter
+    async def t2_setpoint(self, instance, value):
+        controller = self.controllers.get('t2')
+        if controller:
+            set_point_value = controller.set_temp(value)
+
+            if set_point_value:
+                instance._value = value
+                instance.changed()
+                logger.info(f"T2 set to: {value} C")
+            else:
+                logger.error(f"T2 controller couldn't be set to {value}")
+        
+        else:
+            logger.error("T2 controller could not be initialized")
+
+    @t3_setpoint.putter
+    async def t3_setpoint(self, instance, value):
+        controller = self.controllers.get('t3')
+        if controller:
+            set_point_value = controller.set_temp(value)
+
+            if set_point_value:
+                instance._value = value
+                instance.changed()
+                logger.info(f"T3 set to: {value} C")
+            else:
+                logger.error(f"T3 controller couldn't be set to {value}")
+        
+        else:
+            logger.error("T3 controller could not be initialized")
+
+    @t1_runmode.putter
+    async def t1_runmode(self, instance, value):
+        
+        controller = self.controllers.get('t1')
+        if controller:
+            set_point_value = controller.runmode(value)
+
+            if set_point_value:
+                instance._value = value
+                instance.changed()
+                logger.info(f"T1 run mode set to: {value}")
+            else:
+                logger.error(f"T1 controller couldn't be set to {value}")
+        
+        else:
+            logger.error("T1 controller could not be initialized")
+
+    @t2_runmode.putter
+    async def t2_runmode(self, instance, value):
+        
+        controller = self.controllers.get('t2')
+        if controller:
+            runmode_value = controller.runmode(value)
+
+            if runmode_value:
+                instance._value = value
+                instance.changed()
+                logger.info(f"T2 run mode set to: {value}")
+            else:
+                logger.error(f"T2 controller couldn't be set to {value}")
+        
+        else:
+            logger.error("T2 controller could not be initialized")
+
+    @t3_runmode.putter
+    async def t3_runmode(self, instance, value):
+        
+        controller = self.controllers.get('t3')
+        if controller:
+            runmode_value = controller.runmode(value)
+
+            if runmode_value:
+                instance._value = value
+                instance.changed()
+                logger.info(f"T3 run mode set to: {value}")
+            else:
+                logger.error(f"T3 controller couldn't be set to {value}")
+        
+        else:
+            logger.error("T3 controller could not be initialized")
 
 
-def create_ioc(
-        prefix: str, *, host: str, port: int, serial_id: int, autosave: str, **ioc_options
-) -> TCPVGroup:
-    """ Create a new arduino IOC """
-    autosave = pathlib.Path(autosave).resolve().absolute()
+def parse_arguments():
+    
+    parser = argparse.ArgumentParser(description="Arguments for Temperature Controller IOC")
 
-    class TCMain(TCPVGroup):
-        autosave_helper = SubGroup(
-            AutosaveHelper, file_manager=RotatingFileManager(autosave)
+    for i in range(1, 4):
+
+        parser.add_argument(
+            "--t{i}-ip", 
+            help="Hostname or IP of the network-to-serial converter", 
+            required=True, 
+            default='192.168.0.4',
+            type=str,
         )
-        autosave_helper.filename = autosave
-    print(prefix)
-    return TCPVGroup(prefix=prefix, host=host, port=port, serial_id=serial_id, **ioc_options)
 
+        parser.add_argument(
+            "--t{i}-port",
+            help="Network port of the network-to-serial converter",
+            default=502,
+            type=int,
+        )
+        parser.add_argument(
+            "--t{i}-serial_id",
+            help="Serial Id of the RS485 device",
+            default=1,
+            type=int,
+        )
+    
+    args, remaining_args = parser.parse_known_args()
 
-def create_parser():
-    parser, split_args = template_arg_parser(
-        default_prefix="temp:",
-        desc="PID Temp clontroller",
-        supported_async_libs=("asyncio",),
-    )
-
-    parser.add_argument(
-        "--host", 
-        help="Hostname or IP of the network-to-serial converter", 
-        required=True, 
-        default='192.168.0.4',
-        type=str,
-    )
-
-    parser.add_argument(
-        "--port",
-        help="Network port of the network-to-serial converter",
-        default=502,
-        type=int,
-    )
-    parser.add_argument(
-        "--serial_id",
-        help="Serial Id of the RS485 device",
-        default=1,
-        type=int,
-    )
-    parser.add_argument(
-        "--autosave",
-        help="Path to the autosave file",
-        default="autosave.json",
-        type=str,
-    )
-    return parser, split_args
+    return args, remaining_args
 
 
 if __name__ == "__main__":
     """ Primary command-line entry point """
-    parser, split_args = create_parser()
-    args = parser.parse_args()
-    ioc_options, run_options = split_args(args)
+    args, caproto_args = parse_arguments()
 
-    ioc = create_ioc(
-        autosave=args.autosave, host=args.host, port=args.port, serial_id=args.serial_id, **ioc_options
-    )
+    ioc_options, run_options = ioc_arg_parser(args=caproto_args, default_prefix='Temp',
+                                              desc='Temperature Controller IOC')
+
+
+    tc_configs = {
+        't1': {
+            'ip': args.t1_ip,
+            'port': args.t1_port,
+            'serial_id': args.t1_serialid
+        },
+
+        't2': {
+            'ip': args.t2_ip,
+            'port': args.t2_port,
+            'serial_id': args.t2_serialid
+        },
+
+        't3': {
+            'ip': args.t3_ip,
+            'port': args.t3_port,
+            'serial_id': args.t3_serialid
+        },
+    }
+
+    ioc = TCPVGroup(prefix=ioc_options.prefix, tc_configs=tc_configs)
 
     run(ioc.pvdb, **run_options)

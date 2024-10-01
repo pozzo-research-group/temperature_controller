@@ -63,6 +63,6 @@ class temperature_controller:
         temp_mode = self.client.write_register(0x0084, mode,
                                                slave=self.serial_id)
 
-        return self.logger.info(f'The mode of temperature controller
+        return self.logger.info(f'The mode of temperature controller \
                                 {self.serial_id} has been change to {mode}')
 
