@@ -21,7 +21,7 @@ logger = logging.basicConfig(filename='temp_controller_ioc.log',
                              filemode='a',
                              format='%(asctime)s - %(name)s - %(levelname)s\
                                 - %(message)s',
-                             level=logging.info)
+                             level=logging.INFO)
 
 class TCPVGroup(PVGroup):
     "group of PVs for a temperature controller, controlled via ModBus-RTU over RS485 over ethernet"  
@@ -294,7 +294,7 @@ def parse_arguments():
     for i in range(1, 4):
 
         parser.add_argument(
-            "--t{i}-ip", 
+            f"--t{i}_ip", 
             help="Hostname or IP of the network-to-serial converter", 
             required=True, 
             default='192.168.0.4',
@@ -302,13 +302,13 @@ def parse_arguments():
         )
 
         parser.add_argument(
-            "--t{i}-port",
+            f"--t{i}_port",
             help="Network port of the network-to-serial converter",
             default=502,
             type=int,
         )
         parser.add_argument(
-            "--t{i}-serial_id",
+            f"--t{i}_serial_id",
             help="Serial Id of the RS485 device",
             default=1,
             type=int,
