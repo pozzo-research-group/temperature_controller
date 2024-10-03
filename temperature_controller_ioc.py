@@ -130,7 +130,7 @@ class TCPVGroup(PVGroup):
 
     # again copying some style from the fluke ioc example
     def __init__(self, prefix, tc_configs, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(prefix=prefix, *args, **kwargs)
         
         self.controllers = {}
 
@@ -294,25 +294,26 @@ def parse_arguments():
     for i in range(1, 4):
 
         parser.add_argument(
-            f"--t{i}_ip", 
+            f"--t{i}-ip", 
             help="Hostname or IP of the network-to-serial converter", 
-            required=True, 
+            required=False, 
             default='192.168.0.4',
             type=str,
         )
 
         parser.add_argument(
-            f"--t{i}_port",
+            f"--t{i}-port",
             help="Network port of the network-to-serial converter",
             default=502,
             type=int,
         )
         parser.add_argument(
-            f"--t{i}_serial_id",
+            f"--t{i}-serial_id",
             help="Serial Id of the RS485 device",
-            default=1,
+            default=i,
             type=int,
         )
+    # print(parser.parse_known_args())
     
     args, remaining_args = parser.parse_known_args()
 
@@ -321,32 +322,32 @@ def parse_arguments():
 
 if __name__ == "__main__":
     """ Primary command-line entry point """
+   
     args, caproto_args = parse_arguments()
 
-    ioc_options, run_options = ioc_arg_parser(args=caproto_args, default_prefix='Temp',
+    ioc_options, run_options = ioc_arg_parser(argv=caproto_args, default_prefix='Temp',
                                               desc='Temperature Controller IOC')
-
 
     tc_configs = {
         't1': {
             'ip': args.t1_ip,
             'port': args.t1_port,
-            'serial_id': args.t1_serialid
+            'serial_id': args.t1_serial_id
         },
 
         't2': {
             'ip': args.t2_ip,
             'port': args.t2_port,
-            'serial_id': args.t2_serialid
+            'serial_id': args.t2_serial_id
         },
 
         't3': {
             'ip': args.t3_ip,
             'port': args.t3_port,
-            'serial_id': args.t3_serialid
+            'serial_id': args.t3_serial_id
         },
     }
 
-    ioc = TCPVGroup(prefix=ioc_options.prefix, tc_configs=tc_configs)
+    ioc = TCPVGroup(prefix=ioc_options['prefix'], tc_configs=tc_configs)
 
     run(ioc.pvdb, **run_options)
