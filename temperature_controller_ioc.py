@@ -17,11 +17,13 @@ from pymodbus.client import ModbusTcpClient
 from pymodbus.transaction import ModbusRtuFramer
 import pathlib
 
-logger = logging.basicConfig(filename='temp_controller_ioc.log',
+logging.basicConfig(filename='temp_controller_ioc.log',
                              filemode='a',
                              format='%(asctime)s - %(name)s - %(levelname)s\
                                 - %(message)s',
                              level=logging.INFO)
+
+logger = logging.getLogger(name='IOClog')
 
 class TCPVGroup(PVGroup):
     "group of PVs for a temperature controller, controlled via ModBus-RTU over RS485 over ethernet"  
@@ -148,33 +150,35 @@ class TCPVGroup(PVGroup):
                 logger.error(f'Failed to initialize {tc_name}: {e}')
                 self.controllers[tc_name] = None
 
-        asyncio.create_task(self.update_temperatures())    
+    #     self.add(self.update_temperatures())    
 
-    async def update_temperatures(self):
-        while True: 
-            for tc_name, controller in self.controllers.items():
-                if controller:
-                    temp = controller.get_temp()
-                    if temp is not None:
-                        getattr(self, f"{tc_name}_temperature")._value = temp
-                        getattr(self, f"{tc_name}_temperature").changed()
+    # async def update_temperatures(self):
+    #     while True: 
+    #         for tc_name, controller in self.controllers.items():
+    #             if controller:
+    #                 temp = controller.get_temp()
+    #                 logger.info(temp)
+    #                 if temp is not None:
+    #                     getattr(self, f"{tc_name}_temperature")._value = temp
+    #                     getattr(self, f"{tc_name}_temperature").changed()
 
-                        logger.info("Temperature updated: {temp} C")
+    #                     logger.info("Temperature updated: {temp} C")
 
-            await asyncio.sleep(1)
+    #         await asyncio.sleep(1)
 
-    async def update_setpoints(self):
-        while True: 
-            for tc_name, controller in self.controllers.items():
-                if controller:
-                    temp = controller.get_setpoint()
-                    if temp is not None:
-                        getattr(self, f"{tc_name}_setpoint")._value = temp
-                        getattr(self, f"{tc_name}_setpoint").changed()
+    # async def update_setpoints(self):
+    #     while True: 
+    #         for tc_name, controller in self.controllers.items():
+    #             if controller:
+    #                 temp = controller.get_setpoint()
+    #                 if temp is not None:
+    #                     getattr(self, f"{tc_name}_setpoint")._value = temp
+    #                     getattr(self, f"{tc_name}_setpoint").changed()
 
-                        logger.info("Setpoint updated: {temp} C")
+    #                     logger.info("Setpoint updated: {temp} C")
 
-            await asyncio.sleep(1)
+    #         await asyncio.sleep(1)
+
 
     # async def _download_and_update(self):
     #     "download all parameters and put them in the corresponding PVs"
@@ -186,19 +190,24 @@ class TCPVGroup(PVGroup):
     #     temperature_r = await get_temp(self.serial_id, self.client)
     #     await self.temperature.write(temperature_r)
 
+    @t1_temperature.scan(1)
+    async def t1_temperature(self, instance, async_lib):
+        try:
+            controller = self.controllers.get('t1')
+            temp = controller.get_temp()/10
+            await self.t1_temperature.write(temp)
+            logger.info(f'Temperature read fro T1 {temp}')
+        except:
+            raise
+
     @t1_setpoint.putter
     async def t1_setpoint(self, instance, value):
+        #logger.debug(f'the values is {value}')
         controller = self.controllers.get('t1')
+        #logger.debug(f'the values is {value}')
         if controller:
-            set_point_value = controller.set_temp(value)
-
-            if set_point_value:
-                instance._value = value
-                instance.changed()
-                logger.info(f"T1 set to: {value} C")
-            else:
-                logger.error(f"T1 controller couldn't be set to {value}")
-        
+            await controller.set_temp(value)
+            
         else:
             logger.error("T1 controller could not be initialized")
     

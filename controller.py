@@ -3,6 +3,14 @@ from pymodbus.transaction import ModbusRtuFramer
 from requests.exceptions import ConnectionError
 import logging
 
+logging.basicConfig(filename='controller.log',
+                             filemode='a',
+                             format='%(asctime)s - %(name)s - %(levelname)s\
+                                - %(message)s',
+                             level=logging.INFO)
+
+logger = logging.getLogger(name='Controllerlog')
+
 class temperature_controller:
 
     def __init__(self, ip, port, serial_id):
@@ -49,7 +57,9 @@ class temperature_controller:
 
         ''' Writes the temperature setpoint to the RS485 device using the device's serial_id'''
 
-        set_point = self.client.write_register(0x0001, temperature, slave=self.serial_id)
+        temperature = int(temperature)
+        
+        set_point = self.client.write_register(0, temperature, slave=self.serial_id)
 
         return self.logger.info(f'The temperature controller id: {self.serial_id} \
                                 has been set to {temperature} degree C')
