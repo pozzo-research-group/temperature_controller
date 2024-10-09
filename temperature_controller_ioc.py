@@ -111,21 +111,21 @@ class TCPVGroup(PVGroup):
 
     t1_runmode = pvproperty(
         value=0,
-        record="ao",
+        #record="ao",
         read_only=False,
         doc="Run mode value",
     )
 
     t2_runmode = pvproperty(
         value=0,
-        record="ao",
+        #record="ao",
         read_only=False,
         doc="Run mode value",
     )
 
     t3_runmode = pvproperty(
         value=0,
-        record="ao",
+        #record="ao",
         read_only=False,
         doc="Run mode value",
     )
@@ -196,7 +196,27 @@ class TCPVGroup(PVGroup):
             controller = self.controllers.get('t1')
             temp = controller.get_temp()/10
             await self.t1_temperature.write(temp)
-            logger.info(f'Temperature read fro T1 {temp}')
+            logger.info(f'Temperature read from T1 {temp}')
+        except:
+            raise
+    
+    @t2_temperature.scan(1)
+    async def t2_temperature(self, instance, async_lib):
+        try:
+            controller = self.controllers.get('t2')
+            temp = controller.get_temp()/10
+            await self.t2_temperature.write(temp)
+            logger.info(f'Temperature read from T2 is {temp}')
+        except:
+            raise
+
+    @t3_temperature.scan(1)
+    async def t3_temperature(self, instance, async_lib):
+        try:
+            controller = self.controllers.get('t3')
+            temp = controller.get_temp()/10
+            await self.t3_temperature.write(temp)
+            logger.info(f'Temperature read from T3 is {temp}')
         except:
             raise
 
@@ -206,8 +226,11 @@ class TCPVGroup(PVGroup):
         controller = self.controllers.get('t1')
         #logger.debug(f'the values is {value}')
         if controller:
-            await controller.set_temp(value)
-            
+            set_point_value = controller.set_temp(value)
+            if set_point_value:
+                instance._value = value
+                instance.changed()
+                logger.info(f"T1 set to: {value} C")
         else:
             logger.error("T1 controller could not be initialized")
     
@@ -249,7 +272,7 @@ class TCPVGroup(PVGroup):
         
         controller = self.controllers.get('t1')
         if controller:
-            set_point_value = controller.runmode(value)
+            set_point_value = controller.run_mode(value)
 
             if set_point_value:
                 instance._value = value
@@ -266,7 +289,7 @@ class TCPVGroup(PVGroup):
         
         controller = self.controllers.get('t2')
         if controller:
-            runmode_value = controller.runmode(value)
+            runmode_value = controller.run_mode(value)
 
             if runmode_value:
                 instance._value = value
@@ -283,7 +306,7 @@ class TCPVGroup(PVGroup):
         
         controller = self.controllers.get('t3')
         if controller:
-            runmode_value = controller.runmode(value)
+            runmode_value = controller.run_mode(value)
 
             if runmode_value:
                 instance._value = value
@@ -334,7 +357,7 @@ if __name__ == "__main__":
    
     args, caproto_args = parse_arguments()
 
-    ioc_options, run_options = ioc_arg_parser(argv=caproto_args, default_prefix='Temp',
+    ioc_options, run_options = ioc_arg_parser(argv=caproto_args, default_prefix='Temp:',
                                               desc='Temperature Controller IOC')
 
     tc_configs = {

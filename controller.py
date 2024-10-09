@@ -70,7 +70,9 @@ class temperature_controller:
         Changes the temperature controller run value to on or off 
         '''
 
-        temp_mode = self.client.write_register(0x0084, mode,
+        mode = int(mode)
+        
+        temp_mode = self.client.write_register(84, mode,
                                                slave=self.serial_id)
 
         return self.logger.info(f'The mode of temperature controller \
